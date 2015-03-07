@@ -66,14 +66,29 @@ word.adjacents <- function(page, words=NULL) {
 
 
 # A dygraph with revisions, do http://rstudio.github.io/dygraphs/
-revisions <- WikipediR:::wiki_call("http://en.wikipedia.org/w/api.php?format=json&action=query&prop=revisions&titles=Uzbekistan&rvprop=timestamp|user&rvlimit=500")
-revisions <- revisions$query$pages$`31853`$revisions
-timestamp <- unlist(Map(function(r) {r$timestamp}, revisions))
-initial.ts <- 
-ct <- as.POSIXct(timestamp, format = "%Y-%m-%d")
-ts <- xts(rep(1, length(ct)), ct)
-ats <- aggregate(as.zoo(ts), time(ts), sum)
-dygraph(ats)
+get.revision.series <- function(page) {
+  revisions <- WikipediR:::wiki_call(paste("http://en.wikipedia.org/w/api.php?format=json&action=query&prop=revisions&titles=", page, "&rvprop=timestamp|user&rvlimit=1000", sep=""))
+  revisions <- revisions$query$pages[[names(revisions$query$pages)[[1]]]]$revisions
+  timestamp <- unlist(Map(function(r) {r$timestamp}, revisions))
+  initial.ts <- 
+  ct <- as.POSIXct(timestamp, format = "%Y-%m-%d")
+  ts <- xts(rep(1, length(ct)), ct)
+  ats <- aggregate(as.zoo(ts), time(ts), sum)
+
+}
+plot.revisions <- function(page) {
+  ats <- get.revision.series(page)
+  dygraph(ats, main=page, xlab="revisions") %>% dyRangeSelector() %>% dyOptions(stackedGraph=TRUE)
+}
+# Two looks like unless the axes are lined up, which they aint.
+#plot.two.revisions <- function(page1, page2) {
+#  ats1 <- get.revision.series(page1)
+#  ats2 <- get.revision.series(page2)
+#  dygraph(cbind(ats1, ats2)) %>%
+#    dySeries("ats1", label = page1) %>%
+#    dySeries("ats2", label = page2) %>%
+#    dyRangeSelector() %>% dyOptions(stackedGraph=TRUE)
+#}
 
 
 # Space: http://simia.net/wikiglobe/ . Note, whatever json WikipediR
