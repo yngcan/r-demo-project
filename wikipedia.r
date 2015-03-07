@@ -9,6 +9,7 @@ install.dependencies <- function() {
   install.packages("wordcloud")
   install.packages("tm")
   install.packages("dygraphs")
+  install_github("bwlewis/rthreejs")
 }
 
 library("WikipediR")
@@ -18,6 +19,7 @@ library("networkD3")
 library("wordcloud")
 library("dygraphs")
 library("xts")
+library("threejs")
 
 con <- wiki_con("en", "wikipedia")
 page.to.words <- function(page) {
@@ -78,7 +80,7 @@ get.revision.series <- function(page) {
 }
 plot.revisions <- function(page) {
   ats <- get.revision.series(page)
-  dygraph(ats, main=page, xlab="revisions") %>% dyRangeSelector() %>% dyOptions(stackedGraph=TRUE)
+  dygraph(ats, main=page, ylab="revisions") %>% dyRangeSelector() %>% dyOptions(stackedGraph=TRUE)
 }
 # Two looks like unless the axes are lined up, which they aint.
 #plot.two.revisions <- function(page1, page2) {
@@ -92,12 +94,35 @@ plot.revisions <- function(page) {
 
 
 # Space: http://simia.net/wikiglobe/ . Note, whatever json WikipediR
-# does kills the coordinates, so can't use that. Just use httr.
-changes <- WikipediR:::wiki_call("http://en.wikipedia.org/w/api.php?format=json&action=query&list=recentchanges&rctype=edit&rcprop=title|user|timestamp&rclimit=50")
-changes <- changes$query$recentchanges
-titles = unlist(Filter(function(c) {!grepl("/", c)}, Map(function(c) {URLencode(c$title)}, changes)))
-title.url <- paste(titles, collapse="|")
-space <- WikipediR:::wiki_call(paste("https://en.wikipedia.org/w/api.php?action=query&prop=coordinates&titles=", title.url, "&format=json", sep=""))
+globe.recent.changes <- function() {
+  changes <- WikipediR:::wiki_call("http://en.wikipedia.org/w/api.php?format=json&action=query&list=recentchanges&rctype=edit&rcprop=title|user|timestamp&rclimit=200")
+  changes <- changes$query$recentchanges
+  titles = unlist(Filter(function(c) {!grepl("/", c)}, Map(function(c) {c$title}, changes)))
+  
+  folded.titles <- matrix(titles, ncol=50)
+  space.results <- list()
+  for (i in 1:nrow(folded.titles)) {
+    title.url <- paste(folded.titles[i,], collapse="|")
+    # This needs to be batched up into batches of 50.
+    results <- WikipediR:::wiki_call(paste("https://en.wikipedia.org/w/api.php?action=query&prop=coordinates&titles=", title.url, "&format=json&limit=500", sep=""))
+    space.results <- c(space.results, Filter(function(r) {!is.null(r$coordinates)}, results$query$pages))
+    print(length(space.results))
+  }
+  print("total")
+  print(length(space.results))
+  #coords <- Map(function(r) {list(title=r$title, lat=r$coordinates[[1]]$lat, lon=r$coordinates[[1]]$lon)}, space.results)
+  
+  #  value <- unlist(Map(function(tweet) {tweet$retweetCount}, tweets))
+  #  value <- 90 * value / max(value) + 10
+  lat <- unlist(Map(function(res) {as.numeric(res$coordinates[[1]]$lat)}, space.results), use.names=FALSE)
+  long <- unlist(Map(function(res) {as.numeric(res$coordinates[[1]]$lon)}, space.results), use.names=FALSE)
+  value <- rep(100, length(long))
+  earth <- texture(system.file("images/world.jpg",package="threejs"))
+  globejs(img=earth, lat=lat, value=value, long=long, bg="#FFFFFF")
+}
+
+
+
 # want a bubble chart like http://bl.ocks.org/mbostock/4063269
 # but not trivial
 word.frequency <- function(page) {
