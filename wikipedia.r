@@ -3,13 +3,12 @@ install.dependencies <- function() {
   install.packages("networkD3")
   install.packages("rvest")
   library("devtools")
-#  install_github("ramnathv/rCharts")
-#  install.packages("base64enc")
-#  install.packages("knitr")
   install.packages("wordcloud")
   install.packages("tm")
   install.packages("dygraphs")
   install_github("bwlewis/rthreejs")
+  install.packages("ggmap")
+  install_github("rstudio/leaflet")
 }
 
 library("WikipediR")
@@ -20,6 +19,8 @@ library("wordcloud")
 library("dygraphs")
 library("xts")
 library("threejs")
+library("ggmap")
+library("leaflet")
 
 con <- wiki_con("en", "wikipedia")
 page.to.words <- function(page) {
@@ -43,7 +44,7 @@ word.cloud <- function(page, min.freq=10) {
   df <- word.frequencies(page.to.words(page))
   wordcloud(df$word, df$count, min.freq=min.freq, scale=c(3,1))
 }
-# word.cloud("Artificial_intelligence", 10)
+word.cloud("Artificial_intelligence", 10)
 
 
 # Dynamic JS graph of word adjacency for most common 7+ character words
@@ -64,7 +65,7 @@ word.adjacents <- function(page, words=NULL) {
   target <- unlist(c(before, after), use.names=FALSE)
   simpleNetwork(data.frame(src, target))
 }
-# word.adjacents("Utopia")
+word.adjacents("Utopia")
 
 
 # A dygraph with revisions, do http://rstudio.github.io/dygraphs/
@@ -76,12 +77,13 @@ get.revision.series <- function(page) {
   ct <- as.POSIXct(timestamp, format = "%Y-%m-%d")
   ts <- xts(rep(1, length(ct)), ct)
   ats <- aggregate(as.zoo(ts), time(ts), sum)
-
+  cbind(Revisions=ats)
 }
 plot.revisions <- function(page) {
   ats <- get.revision.series(page)
-  dygraph(ats, main=page, ylab="revisions") %>% dyRangeSelector() %>% dyOptions(stackedGraph=TRUE)
+  dygraph(ats, main=page, ylab="Revisions") %>% dyRangeSelector() %>% dyOptions(stackedGraph=TRUE)
 }
+plot.revisions("United_States")
 # Two looks like unless the axes are lined up, which they aint.
 #plot.two.revisions <- function(page1, page2) {
 #  ats1 <- get.revision.series(page1)
@@ -93,7 +95,9 @@ plot.revisions <- function(page) {
 #}
 
 
-# Space: http://simia.net/wikiglobe/ . Note, whatever json WikipediR
+# Space: http://simia.net/wikiglobe/ .
+# Doesn't look great. Consider using geosearch and putting it on Google Maps
+# you can get lat/lon for places with: http://andybeger.com/2013/08/06/finding-coordinates-for-cities-etc-with-r/
 globe.recent.changes <- function() {
   changes <- WikipediR:::wiki_call("http://en.wikipedia.org/w/api.php?format=json&action=query&list=recentchanges&rctype=edit&rcprop=title|user|timestamp&rclimit=200")
   changes <- changes$query$recentchanges
@@ -110,18 +114,33 @@ globe.recent.changes <- function() {
   }
   print("total")
   print(length(space.results))
-  #coords <- Map(function(r) {list(title=r$title, lat=r$coordinates[[1]]$lat, lon=r$coordinates[[1]]$lon)}, space.results)
-  
-  #  value <- unlist(Map(function(tweet) {tweet$retweetCount}, tweets))
-  #  value <- 90 * value / max(value) + 10
   lat <- unlist(Map(function(res) {as.numeric(res$coordinates[[1]]$lat)}, space.results), use.names=FALSE)
   long <- unlist(Map(function(res) {as.numeric(res$coordinates[[1]]$lon)}, space.results), use.names=FALSE)
   value <- rep(100, length(long))
   earth <- texture(system.file("images/world.jpg",package="threejs"))
   globejs(img=earth, lat=lat, value=value, long=long, bg="#FFFFFF")
 }
+globe.recent.changes()
+
+globe.earthquakes <- function() {
+  # http://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson
+}
 
 
+geo.search <- function(place, radius=10000) {
+  Sys.setlocale(category="LC_ALL", locale="en_US.UTF-8")
+  latlon <- geocode(place)
+  print(paste("https://en.wikipedia.org/w/api.php?action=query&list=geosearch&gsradius=", radius, "&gscoord=", latlon$lat, "|", latlon$lon, sep=""))
+  results <- WikipediR:::wiki_call(paste("https://en.wikipedia.org/w/api.php?action=query&list=geosearch&gsradius=", radius, "&gscoord=", latlon$lat, "|", latlon$lon, "&format=json&limit=500", sep=""))
+  lon <- sapply(results$query$geosearch, `[[`, "lon")
+  lat <- sapply(results$query$geosearch, `[[`, "lat")
+  title <- sapply(results$query$geosearch, `[[`, "title")
+  attr <- 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  template <- 'http://{s}.tile.stamen.com/toner/{z}/{x}/{y}.png'
+  opts = tileOptions(subdomains='abcd', minZoom=0, maxZoom=20)
+  leaflet() %>% addTiles(urlTemplate=template, attribution=attr, options=opts) %>% addCircleMarkers(lon, lat, popup=title)
+}
+geo.search("Venice")
 
 # want a bubble chart like http://bl.ocks.org/mbostock/4063269
 # but not trivial
