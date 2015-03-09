@@ -83,6 +83,7 @@ page.links <- function(title) {
 }
 
 page.adjacents <- function(page) {
+  Sys.setlocale(category="LC_ALL", locale="en_US.UTF-8")
   links <- page.links(page)
   reducer <- function(sofar, title) {
     new.links <- page.links(title)

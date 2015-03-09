@@ -19,10 +19,10 @@
 # We can use [networkd3](http://christophergandrud.github.io/networkD3/)
 # to visualize the relationships between pages in a beautiful and
 # interactive way. Here is a partial visualization of the network
-# surrounding the page of a great statistician.
+# surrounding one Wikipedia page.
 
 source("wikipedia.utils.r")
-page.adjacents("David Blackwell")
+page.adjacents("Garfield")
 
 # Now let's take a look at the cumulative revisions two different pages
 # have been getting using the interactive time series library
