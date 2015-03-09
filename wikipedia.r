@@ -122,16 +122,35 @@ globe.recent.changes <- function() {
 }
 globe.recent.changes()
 
+library("httr")
 globe.earthquakes <- function() {
-  # http://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson
+  now <- as.POSIXct(Sys.time(), "UTC")
+  since <- now - 60 * 60 * 24
+  since.str <- format(since, "%y-%m-%dT%H:%M:%S")
+  resp <- GET("http://earthquake.usgs.gov/fdsnws/event/1/query", query=list(format="geojson", starttime=since.str))
+  features <- httr::content(resp, "parsed")$features
+  mag <- unlist(Map(function(f) {f$properties$mag}, features))
+  long <- unlist(Map(function(f) {f$geom$coordinates[[1]]}, features))
+  lat <- unlist(Map(function(f) {f$geom$coordinates[[2]]}, features))
+#  earth <- texture(system.file("images/world.jpg",package="threejs"))
+#  earth <- texture("/home/sense/bw.jpg")
+#  globejs(img="/home/sense/bw.jpg", lat=lat, value=(mag / 5) * 100, long=long, bg="#FFFFFF", color="#ED3E46", bodycolor="#FFFFFF")
+#  moon <- system.file("images/moon.jpg", package="threejs")
+  earth <- "/home/sense/land_shallow_topo_2048.jpg"
+  globejs(img=earth, bodycolor="#555555", emissive="#444444",
+         lightcolor="#555555", bg="#ffffff", lat=lat, long=long,
+         color="#FF3333",
+         value=mag * 50)
+  
 }
+globe.earthquakes()
 
 
 geo.search <- function(place, radius=10000) {
   Sys.setlocale(category="LC_ALL", locale="en_US.UTF-8")
   latlon <- geocode(place)
   print(paste("https://en.wikipedia.org/w/api.php?action=query&list=geosearch&gsradius=", radius, "&gscoord=", latlon$lat, "|", latlon$lon, sep=""))
-  results <- WikipediR:::wiki_call(paste("https://en.wikipedia.org/w/api.php?action=query&list=geosearch&gsradius=", radius, "&gscoord=", latlon$lat, "|", latlon$lon, "&format=json&limit=500", sep=""))
+  results <- WikipediR:::wiki_call(paste("https://en.wikipedia.org/w/api.php?action=query&list=geosearch&gsradius=", radius, "&gscoord=", latlon$lat, "|", latlon$lon, "&format=json", sep=""))
   lon <- sapply(results$query$geosearch, `[[`, "lon")
   lat <- sapply(results$query$geosearch, `[[`, "lat")
   title <- sapply(results$query$geosearch, `[[`, "title")
