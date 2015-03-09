@@ -73,16 +73,34 @@ get.revision.series <- function(page) {
   ))
   pages <- httr::content(response, "parsed")$query$pages
   revisions <- pages[[names(pages)[[1]]]]$revisions
-  timestamp <- purrr::map(revisions, ~ .$timestamp) %>% unlist
+  timestamp <- revisions %>% purrr::map(~ .$timestamp) %>% unlist
   ct <- as.POSIXct(timestamp, format = "%Y-%m-%d")
   ts <- xts(rep(1, length(ct)), ct)
-  aggregate(as.zoo(ts), time(ts), sum)
+  agg <- aggregate(as.zoo(ts), time(ts), sum)
+  xts(unlist(agg), time(agg))
 }
 plot.revisions <- function(page) {
   ats <- cbind(Revisions=get.revision.series(page))
   dygraph(ats, main=page, ylab="Revisions") %>% dyRangeSelector() %>% dyOptions(stackedGraph=TRUE)
 }
 # plot.revisions("United_States")
+plot.two.revisions <- function(page1, page2) {
+  tss <- c(page1, page2) %>% purrr::map(get.revision.series)
+  first.i <- tss %>% purrr::map(~ time(first(.))) %>% which.max
+  first.t <- time(first(tss[[first.i]]))
+  
+  data <- cbind(p1=tss[[1]], p2=tss[[2]])
+  data[is.na(data)] <- 0
+  data <- data[time(data) >= first.t]
+
+  dygraph(data) %>%
+  dySeries(names(data)[1], label = page1) %>%
+  dySeries(names(data)[2], label = page2) %>%
+  dyRangeSelector() %>% dyOptions(stackedGraph=TRUE)
+}
+plot.two.revisions("Mumbai", "Bangalore")
+plot.two.revisions("J. K. Rowling", "George R. R. Martin")
+
 
 
 # Recent earthquakes on a globe
@@ -97,9 +115,9 @@ globe.earthquakes <- function() {
     starttime=since.str
   ))
   features <- httr::content(resp, "parsed")$features
-  mag <- purrr::map(features, ~ .$properties$mag) %>% unlist
-  long <- purrr::map(features, ~ .$geom$coordinates[[1]]) %>% unlist
-  lat <- purrr::map(features, ~ .$geom$coordinates[[2]]) %>% unlist
+  mag <- features %>% purrr::map(~ .$properties$mag) %>% unlist
+  long <- features %>% purrr::map~ .$geom$coordinates[[1]]) %>% unlist
+  lat <- features %>% purrr::map(~ .$geom$coordinates[[2]]) %>% unlist
   earth <- "/home/sense/land_shallow_topo_2048.jpg"
   globejs(img=earth, bodycolor="#555555", emissive="#444444",
          lightcolor="#555555", bg="#ffffff", lat=lat, long=long,
@@ -126,7 +144,11 @@ geo.search <- function(place, radius=10000) {
   attr <- 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
   template <- 'http://{s}.tile.stamen.com/toner/{z}/{x}/{y}.png'
   opts = tileOptions(subdomains='abcd', minZoom=0, maxZoom=20)
+  # Gritty black-and-white tiles look good with Venice
   leaflet() %>% addTiles(urlTemplate=template, attribution=attr, options=opts) %>% addCircleMarkers(info$lon, info$lat, popup=info$title)
+  
+  # Standard OpenStreetMap tiles look good with Samarkand
+  # leaflet() %>% addTiles(options=opts) %>% addCircleMarkers(info$lon, info$lat, popup=info$title)
 }
 # geo.search("Venice")
 
