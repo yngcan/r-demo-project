@@ -11,11 +11,19 @@ install.dependencies <- function() {
   install_github("hadley/purrr")
 }
 
+sink("/dev/null")
+
 library("httr")
 library("rvest")
 library("tm")
 library("wordcloud")
 library("purrr")
+library("networkD3")
+library("xts")
+library("dygraphs")
+library("threejs")
+library("ggmap")
+library("leaflet")
 
 page.to.words <- function(page) {
   text <- GET(paste("http://en.wikipedia.org/wiki", page, sep="/"))
@@ -39,7 +47,6 @@ wikipedia.word.cloud <- function(page, min.freq=10) {
 # wikipedia.word.cloud("Artificial_intelligence", 10)
 
 # Dynamic JS graph of word adjacency for most common 7+ character words
-library("networkD3")
 word.adjacents <- function(page, words=NULL) {
   observed.words <- page.to.words(page)
   if (is.null(words)) {
@@ -60,8 +67,6 @@ word.adjacents <- function(page, words=NULL) {
 # word.adjacents("Utopia")
 
 # A dygraph with revisions, do http://rstudio.github.io/dygraphs/
-library("xts")
-library("dygraphs")
 get.revision.series <- function(page) {
   response <- GET("http://en.wikipedia.org/w/api.php?", query=list(
     format="json",
@@ -92,20 +97,17 @@ plot.two.revisions <- function(page1, page2) {
   data <- cbind(p1=tss[[1]], p2=tss[[2]])
   data[is.na(data)] <- 0
   data <- data[time(data) >= first.t]
-
+  data <- cumsum(data)
   dygraph(data) %>%
   dySeries(names(data)[1], label = page1) %>%
   dySeries(names(data)[2], label = page2) %>%
   dyRangeSelector() %>% dyOptions(stackedGraph=TRUE)
 }
-plot.two.revisions("Mumbai", "Bangalore")
-plot.two.revisions("J. K. Rowling", "George R. R. Martin")
+# plot.two.revisions("J. K. Rowling", "George R. R. Martin")
 
 
 
 # Recent earthquakes on a globe
-library("httr")
-library("threejs")
 globe.earthquakes <- function() {
   now <- as.POSIXct(Sys.time(), "UTC")
   since <- now - 60 * 60 * 24
@@ -116,7 +118,7 @@ globe.earthquakes <- function() {
   ))
   features <- httr::content(resp, "parsed")$features
   mag <- features %>% purrr::map(~ .$properties$mag) %>% unlist
-  long <- features %>% purrr::map~ .$geom$coordinates[[1]]) %>% unlist
+  long <- features %>% purrr::map(~ .$geom$coordinates[[1]]) %>% unlist
   lat <- features %>% purrr::map(~ .$geom$coordinates[[2]]) %>% unlist
   earth <- "/home/sense/land_shallow_topo_2048.jpg"
   globejs(img=earth, bodycolor="#555555", emissive="#444444",
@@ -126,9 +128,6 @@ globe.earthquakes <- function() {
   
 }
 # globe.earthquakes()
-
-library("ggmap")
-library("leaflet")
 geo.search <- function(place, radius=10000) {
   Sys.setlocale(category="LC_ALL", locale="en_US.UTF-8")
   latlon <- geocode(place)
@@ -152,3 +151,4 @@ geo.search <- function(place, radius=10000) {
 }
 # geo.search("Venice")
 
+sink()
