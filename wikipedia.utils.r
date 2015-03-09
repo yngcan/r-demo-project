@@ -46,7 +46,8 @@ wikipedia.word.cloud <- function(page, min.freq=10) {
 }
 # wikipedia.word.cloud("Artificial_intelligence", 10)
 
-# Dynamic JS graph of word adjacency for most common 7+ character words
+# Dynamic JS graph of word adjacency for most common 7+ character 
+# words
 word.adjacents <- function(page, words=NULL) {
   observed.words <- page.to.words(page)
   if (is.null(words)) {
@@ -65,6 +66,34 @@ word.adjacents <- function(page, words=NULL) {
   simpleNetwork(data.frame(src, target))
 }
 # word.adjacents("Utopia")
+
+# Dynamic JS graph of pages that link one another.
+page.links <- function(title) {
+  response <- GET("http://en.wikipedia.org/w/api.php?", query=list(
+    format="json",
+    action="query",
+    prop="links",
+    pllimit=10,
+    titles=title
+  ))
+  pages <- httr::content(response, "parsed")$query$pages
+  page <- pages[[names(pages)[[1]]]]
+  target <- page$links %>% purrr::map(~ .$title) %>% unlist
+  list(target = target, src = rep(page$title, length(target)))
+}
+
+page.adjacents <- function(page) {
+  links <- page.links(page)
+  reducer <- function(sofar, title) {
+    new.links <- page.links(title)
+#    print(sofar)
+    list(target=c(sofar$target, new.links$target),
+        src=c(sofar$src, new.links$src))
+  }
+  all.links <- links$target %>% purrr::reduce(reducer, .init=links)
+  simpleNetwork(data.frame(all.links))
+}
+
 
 # A dygraph with revisions, do http://rstudio.github.io/dygraphs/
 get.revision.series <- function(page) {

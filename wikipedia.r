@@ -14,13 +14,15 @@
 # --------------------------------
 #
 # Wikipedia's [public API](http://en.wikipedia.org/w/api.php) is an
-# incredibly interesting data source. We can use [networkd3](http://christophergandrud.github.io/networkD3/)
-# to visualize the attentions of recent editors in a beautiful and
-# interactive way. Users who are connected recently edited the same
-# article. Go ahead and move the network around with your mouse!
+# incredibly interesting data source. 
+#
+# We can use [networkd3](http://christophergandrud.github.io/networkD3/)
+# to visualize the relationships between pages in a beautiful and
+# interactive way. Here is a partial visualization of the network
+# surrounding the page of a great statistician.
 
 source("wikipedia.utils.r")
-word.adjacents("Utopia")
+page.adjacents("David Blackwell")
 
 # Now let's take a look at the cumulative revisions two different pages
 # have been getting using the interactive time series library
