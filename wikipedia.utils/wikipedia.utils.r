@@ -1,28 +1,24 @@
-install.dependencies <- function() {
-  install.packages("networkD3")
-  install.packages("rvest")
-  library("devtools")
-  install.packages("wordcloud")
-  install.packages("tm")
-  install.packages("dygraphs")
-  install_github("bwlewis/rthreejs")
-  install.packages("ggmap")
-  install_github("rstudio/leaflet")
-  install_github("hadley/purrr")
-}
-
-sink("/dev/null")
+# install.packages("networkD3")
+# install.packages("rvest")
+# library("devtools")
+# install.packages("wordcloud")
+# install.packages("tm")
+# install.packages("dygraphs")
+# install_github("bwlewis/rthreejs")
+# install.packages("ggmap")
+# install_github("rstudio/leaflet")
+# install_github("hadley/purrr")
 
 library("httr")
 library("rvest")
-library("tm")
+suppressMessages(library("tm"))
 library("wordcloud")
-library("purrr")
+suppressMessages(library("purrr"))
 library("networkD3")
-library("xts")
+suppressMessages(library("xts"))
 library("dygraphs")
-library("threejs")
-library("ggmap")
+suppressMessages(library("threejs"))
+suppressMessages(library("ggmap"))
 library("leaflet")
 
 page.to.words <- function(page) {
@@ -44,7 +40,6 @@ wikipedia.word.cloud <- function(page, min.freq=10) {
   df <- page %>% page.to.words %>% word.frequencies
   wordcloud(df$word, df$count, min.freq=min.freq, scale=c(3,1))
 }
-# wikipedia.word.cloud("Artificial_intelligence", 10)
 
 # Dynamic JS graph of word adjacency for most common 7+ character 
 # words
@@ -65,7 +60,6 @@ word.adjacents <- function(page, words=NULL) {
   target <- c(before, after) %>% unlist(use.names=FALSE)
   simpleNetwork(data.frame(src, target))
 }
-# word.adjacents("Utopia")
 
 # Dynamic JS graph of pages that link one another.
 page.links <- function(title) {
@@ -82,16 +76,16 @@ page.links <- function(title) {
   list(target = target, src = rep(page$title, length(target)))
 }
 
-page.adjacents <- function(page, include.original=F) {
+page.neighborhood <- function(page, open=T) {
   Sys.setlocale(category="LC_ALL", locale="en_US.UTF-8")
   links <- page.links(page)
   reducer <- function(sofar, title) {
     new.links <- page.links(title)
-    keep <- new.links$target %>% purrr::map(~ (. %in% links$target) || ((. == page) && include.original)) %>% unlist
+    keep <- new.links$target %>% purrr::map(~ (. %in% links$target) || ((. == page) && !open)) %>% unlist
     list(target=c(sofar$target, new.links$target[keep]),
         src=c(sofar$src, new.links$src[keep]))
   }
-  if (include.original) {
+  if (!open) {
     init = links
   } else {
     init = list(src=c(), target=c())
@@ -99,7 +93,6 @@ page.adjacents <- function(page, include.original=F) {
   all.links <- links$target %>% purrr::reduce(reducer, .init=init)
   simpleNetwork(data.frame(all.links))
 }
-
 
 # A dygraph with revisions, do http://rstudio.github.io/dygraphs/
 get.revision.series <- function(page) {
@@ -116,7 +109,7 @@ get.revision.series <- function(page) {
   timestamp <- revisions %>% purrr::map(~ .$timestamp) %>% unlist
   ct <- as.POSIXct(timestamp, format = "%Y-%m-%d")
   ts <- xts(rep(1, length(ct)), ct)
-  agg <- aggregate(as.zoo(ts), time(ts), sum)
+  agg <- suppressWarnings(aggregate(as.zoo(ts), time(ts), sum))
   xts(unlist(agg), time(agg))
 }
 plot.revisions <- function(page) {
@@ -124,7 +117,7 @@ plot.revisions <- function(page) {
   dygraph(ats, main=page, ylab="Revisions") %>% dyRangeSelector() %>% dyOptions(stackedGraph=TRUE)
 }
 # plot.revisions("United_States")
-plot.two.revisions <- function(page1, page2) {
+compare.cumulative.revisions <- function(page1, page2) {
   tss <- c(page1, page2) %>% purrr::map(get.revision.series)
   first.i <- tss %>% purrr::map(~ time(first(.))) %>% which.max
   first.t <- time(first(tss[[first.i]]))
@@ -138,12 +131,9 @@ plot.two.revisions <- function(page1, page2) {
   dySeries(names(data)[2], label = page2) %>%
   dyRangeSelector() %>% dyOptions(stackedGraph=TRUE)
 }
-# plot.two.revisions("J. K. Rowling", "George R. R. Martin")
-
-
 
 # Recent earthquakes on a globe
-globe.earthquakes <- function() {
+previous.day.earthquakes <- function() {
   now <- as.POSIXct(Sys.time(), "UTC")
   since <- now - 60 * 60 * 24
   since.str <- format(since, "%y-%m-%dT%H:%M:%S")
@@ -162,8 +152,7 @@ globe.earthquakes <- function() {
          value=mag * 50)
   
 }
-# globe.earthquakes()
-geo.search <- function(place, radius=10000) {
+nearby.pages <- function(place, radius=10000) {
   Sys.setlocale(category="LC_ALL", locale="en_US.UTF-8")
   latlon <- geocode(place)
   response <- GET("https://en.wikipedia.org/w/api.php", query=list(
@@ -184,6 +173,3 @@ geo.search <- function(place, radius=10000) {
   # Standard OpenStreetMap tiles look good with Samarkand
   # leaflet() %>% addTiles(options=opts) %>% addCircleMarkers(info$lon, info$lat, popup=info$title)
 }
-# geo.search("Venice")
-
-sink()
