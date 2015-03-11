@@ -73,7 +73,7 @@ page.links <- function(title) {
     format="json",
     action="query",
     prop="links",
-    pllimit=10,
+    pllimit=100,
     titles=title
   ))
   pages <- httr::content(response, "parsed")$query$pages
@@ -82,16 +82,21 @@ page.links <- function(title) {
   list(target = target, src = rep(page$title, length(target)))
 }
 
-page.adjacents <- function(page) {
+page.adjacents <- function(page, include.original=F) {
   Sys.setlocale(category="LC_ALL", locale="en_US.UTF-8")
   links <- page.links(page)
   reducer <- function(sofar, title) {
     new.links <- page.links(title)
-#    print(sofar)
-    list(target=c(sofar$target, new.links$target),
-        src=c(sofar$src, new.links$src))
+    keep <- new.links$target %>% purrr::map(~ (. %in% links$target) || ((. == page) && include.original)) %>% unlist
+    list(target=c(sofar$target, new.links$target[keep]),
+        src=c(sofar$src, new.links$src[keep]))
   }
-  all.links <- links$target %>% purrr::reduce(reducer, .init=links)
+  if (include.original) {
+    init = links
+  } else {
+    init = list(src=c(), target=c())
+  }
+  all.links <- links$target %>% purrr::reduce(reducer, .init=init)
   simpleNetwork(data.frame(all.links))
 }
 
@@ -150,7 +155,7 @@ globe.earthquakes <- function() {
   mag <- features %>% purrr::map(~ .$properties$mag) %>% unlist
   long <- features %>% purrr::map(~ .$geom$coordinates[[1]]) %>% unlist
   lat <- features %>% purrr::map(~ .$geom$coordinates[[2]]) %>% unlist
-  earth <- "/home/sense/land_shallow_topo_2048.jpg"
+  earth <- "/home/sense/wikipedia.utils/land_shallow_topo_2048.jpg"
   globejs(img=earth, bodycolor="#555555", emissive="#444444",
          lightcolor="#555555", bg="#ffffff", lat=lat, long=long,
          color="#FF3333",
