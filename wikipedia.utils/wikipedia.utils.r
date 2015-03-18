@@ -1,3 +1,9 @@
+# Install packages
+# ----------------
+# 
+# This only needs to be done once per project. Once the packages are installed
+# to the project, every console launched in the project can use them.
+#
 # install.packages("networkD3")
 # install.packages("rvest")
 # library("devtools")
@@ -21,8 +27,8 @@ suppressMessages(library("threejs"))
 suppressMessages(library("ggmap"))
 library("leaflet")
 
-page.to.words <- function(page) {
-  text <- GET(paste("http://en.wikipedia.org/wiki", page, sep="/"))
+page.to.words <- function(page, lang="en") {
+  text <- GET(paste("http://", lang, ".wikipedia.org/wiki/", page, sep=""))
   body <- httr::content(text) %>% html_nodes("body") %>% html_text
   long.words <- body %>% strsplit("[^a-zA-Z]") %>% unlist %>% keep(~ nchar(.) > 0)
   purrr::map(long.words, tolower)
@@ -41,8 +47,6 @@ wikipedia.word.cloud <- function(page, min.freq=10) {
   wordcloud(df$word, df$count, min.freq=min.freq, scale=c(3,1))
 }
 
-# Dynamic JS graph of word adjacency for most common 7+ character 
-# words
 word.adjacents <- function(page, words=NULL) {
   observed.words <- page.to.words(page)
   if (is.null(words)) {
@@ -61,26 +65,41 @@ word.adjacents <- function(page, words=NULL) {
   simpleNetwork(data.frame(src, target))
 }
 
-# Dynamic JS graph of pages that link one another.
-page.links <- function(title) {
-  response <- GET("http://en.wikipedia.org/w/api.php?", query=list(
+# Dynamic neighborhood graph
+# --------------------------
+
+page.links <- function(title, lang="en") {
+  
+  # Returns the links from the given Wikipedia page as a list
+  # of vectors containing the sources and targets of the links.
+  
+  # Use httr to query the Wikipedia API.
+  response <- GET(paste("http://", lang, ".wikipedia.org/w/api.php?", sep=""), query=list(
     format="json",
     action="query",
     prop="links",
-    pllimit=100,
+    # Keep the number of links per page to 50, to avoid hitting the Wikipedia
+    # API too hard.
+    pllimit=50,
     titles=title
   ))
   pages <- httr::content(response, "parsed")$query$pages
+  
+  # Put the data in a more usable format. 
   page <- pages[[names(pages)[[1]]]]
   target <- page$links %>% purrr::map(~ .$title) %>% unlist
   list(target = target, src = rep(page$title, length(target)))
 }
 
-page.neighborhood <- function(page, open=T) {
-  Sys.setlocale(category="LC_ALL", locale="en_US.UTF-8")
-  links <- page.links(page)
+page.neighborhood <- function(page, open=T, lang="en") {
+  
+  # Returns an interactive HTML widget showing the neighborhood
+  # of the given Wikipedia page.
+  
+  # Get all links inside the page's neighborhood.
+  links <- page.links(page, lang)
   reducer <- function(sofar, title) {
-    new.links <- page.links(title)
+    new.links <- page.links(title, lang)
     keep <- new.links$target %>% purrr::map(~ (. %in% links$target) || ((. == page) && !open)) %>% unlist
     list(target=c(sofar$target, new.links$target[keep]),
         src=c(sofar$src, new.links$src[keep]))
@@ -91,12 +110,20 @@ page.neighborhood <- function(page, open=T) {
     init = list(src=c(), target=c())
   }
   all.links <- links$target %>% purrr::reduce(reducer, .init=init)
+  
+  # Use the htmlwidgets simpleNetwork function to render and
+  # return the interactive visualization.
   simpleNetwork(data.frame(all.links))
 }
 
-# A dygraph with revisions, do http://rstudio.github.io/dygraphs/
-get.revision.series <- function(page) {
-  response <- GET("http://en.wikipedia.org/w/api.php?", query=list(
+# Compare cumulative revisions
+# ----------------------------
+
+get.revision.series <- function(page, lang) {
+  
+  # Use httr to get the recent revisions for the given page.
+  
+  response <- GET(paste("http://", lang, ".wikipedia.org/w/api.php?", sep=""), query=list(
     format="json",
     action="query",
     prop="revisions",
@@ -106,26 +133,41 @@ get.revision.series <- function(page) {
   ))
   pages <- httr::content(response, "parsed")$query$pages
   revisions <- pages[[names(pages)[[1]]]]$revisions
+  
+  # Convert the revision records to an xts time series of daily
+  # revision numbers.
+  
   timestamp <- revisions %>% purrr::map(~ .$timestamp) %>% unlist
   ct <- as.POSIXct(timestamp, format = "%Y-%m-%d")
   ts <- xts(rep(1, length(ct)), ct)
   agg <- suppressWarnings(aggregate(as.zoo(ts), time(ts), sum))
   xts(unlist(agg), time(agg))
 }
-plot.revisions <- function(page) {
-  ats <- cbind(Revisions=get.revision.series(page))
+plot.revisions <- function(page, lang="en") {
+  ats <- cbind(Revisions=get.revision.series(page, lang))
   dygraph(ats, main=page, ylab="Revisions") %>% dyRangeSelector() %>% dyOptions(stackedGraph=TRUE)
 }
-# plot.revisions("United_States")
-compare.cumulative.revisions <- function(page1, page2) {
-  tss <- c(page1, page2) %>% purrr::map(get.revision.series)
+compare.cumulative.revisions <- function(page1, page2, lang="en") {
+  
+  # Get the daily revision numbers for the two given pages.
+  
+  tss <- c(page1, page2) %>% purrr::map(~ get.revision.series(., lang))
+  
+  # Conform the two time series.
+  
   first.i <- tss %>% purrr::map(~ time(first(.))) %>% which.max
   first.t <- time(first(tss[[first.i]]))
-  
   data <- cbind(p1=tss[[1]], p2=tss[[2]])
   data[is.na(data)] <- 0
   data <- data[time(data) >= first.t]
+  
+  # Cumulate the time series.
+  
   data <- cumsum(data)
+  
+  # Use the htmlwidgets dygraph function to create and return
+  # a dynamic visualization of the two pages' revisions.
+  
   dygraph(data) %>%
   dySeries(names(data)[1], label = page1) %>%
   dySeries(names(data)[2], label = page2) %>%
@@ -133,7 +175,12 @@ compare.cumulative.revisions <- function(page1, page2) {
 }
 
 # Recent earthquakes on a globe
+# -----------------------------
+
 previous.day.earthquakes <- function() {
+  
+  # Use HTTR to query the last 24 hours' earthquakes from USGS.
+  
   now <- as.POSIXct(Sys.time(), "UTC")
   since <- now - 60 * 60 * 24
   since.str <- format(since, "%y-%m-%dT%H:%M:%S")
@@ -142,9 +189,16 @@ previous.day.earthquakes <- function() {
     starttime=since.str
   ))
   features <- httr::content(resp, "parsed")$features
+  
+  # Extract latitude, longitude and magnitude for each earthquake.
+  
   mag <- features %>% purrr::map(~ .$properties$mag) %>% unlist
   long <- features %>% purrr::map(~ .$geom$coordinates[[1]]) %>% unlist
   lat <- features %>% purrr::map(~ .$geom$coordinates[[2]]) %>% unlist
+  
+  # Use the htmlwidgets globejs function to create and return an
+  # interactive globe.
+  
   earth <- "/home/sense/wikipedia.utils/land_shallow_topo_2048.jpg"
   globejs(img=earth, bodycolor="#555555", emissive="#444444",
          lightcolor="#555555", bg="#ffffff", lat=lat, long=long,
@@ -152,9 +206,20 @@ previous.day.earthquakes <- function() {
          value=mag * 50)
   
 }
+
+# Map of nearby pages
+# -------------------
+
 nearby.pages <- function(place, radius=10000) {
-  Sys.setlocale(category="LC_ALL", locale="en_US.UTF-8")
+  
+  # Use ggmap to attempt to geocode (get latitude and longitude for)
+  # the given place.
+  
   latlon <- geocode(place)
+  
+  # Use httr to get up to ten Wikipedia pages within 10km of the given
+  # point.
+  
   response <- GET("https://en.wikipedia.org/w/api.php", query=list(
     action="query",
     list="geosearch",
@@ -163,7 +228,14 @@ nearby.pages <- function(place, radius=10000) {
     format="json"
   ))
   geosearch <- httr::content(response, "parsed")$query$geosearch
+  
+  # Extract the latitude, longitude and title of each page.
+  
   info <- purrr::unzip(geosearch, c("lon", "lat", "title"))
+  
+  # Use the htmlwidgets leaflet function to create and return an
+  # interacive map with markers.
+  
   attr <- 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
   template <- 'http://{s}.tile.stamen.com/toner/{z}/{x}/{y}.png'
   opts = tileOptions(subdomains='abcd', minZoom=0, maxZoom=20)
